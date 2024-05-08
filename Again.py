@@ -5,7 +5,45 @@ import random
 parks_spots = []
 car_spots = []
 
-def update_weights(parks_spots, car_spots,full_frame):
+def set_default_park_spots(car_spots, parks_spots, box):
+    parks_spots=[]
+    scale_factor = 0.5
+    avgsize = 0
+    count_spots = 0
+    savelist = []
+
+    for car_spot in car_spots:
+
+        car_x1, car_y1, car_x2, car_y2 = car_spot
+        size_now = abs(car_x1 - car_x2) * abs(car_y1 - car_y2)
+        avgsize += size_now
+        count_spots += 1
+
+    for car_spot in car_spots:
+
+        car_x1, car_y1, car_x2, car_y2 = car_spot
+        size_now = abs(car_x1 - car_x2) * abs(car_y1 - car_y2)
+        #print(car_spot)
+        if size_now < 2 * avgsize/count_spots and size_now > 1/2 * avgsize/count_spots:
+            width_reduction = int((car_x2 - car_x1) * (1 - scale_factor) / 2)
+            height_reduction = int((car_y2 - car_y1) * (1 - scale_factor) / 2)
+
+            parks_spots.append([
+                len(parks_spots),
+                round(car_x1 + width_reduction),
+                round(car_y1 + height_reduction),
+                round(car_x2 - width_reduction),
+                round(car_y2 - height_reduction),
+                1.0
+                ])
+
+
+
+        # cv2.rectangle(frame, (round(car_x1 + width_reduction), round(car_y1 + height_reduction)),
+        #               (round(car_x2 - width_reduction), round(car_y2 - height_reduction),), (255, 0, 0), 2)
+    return parks_spots
+
+def update_weights(parks_spots, car_spots, full_frame):
     updated_parks_spots = []
 
 
@@ -26,7 +64,7 @@ def update_weights(parks_spots, car_spots,full_frame):
         if car_found:
             weight+=0.1
         else:
-            weight-=0.1
+            weight-=99
 
 
 
@@ -80,25 +118,30 @@ def process_video_with_tracking(model, input_video_path, output_video_path="outp
                 avg_size += frame_size_now
                 asbyf = avg_size / cycles
                 all_avg_size.append(asbyf)
+                #print(box)
 
                 if frame_size_now > asbyf + 4000:
                     box[0],box[1],box[2],box[3]=0,0,1,1
 
                 if frame_count == 0:
-                    scale_factor = 0.5  # Уменьшение на 15%
-                    width_reduction = int((box[2] - box[0]) * (1 - scale_factor) / 2)
-                    height_reduction = int((box[3] - box[1]) * (1 - scale_factor) / 2)
 
-                    parks_spots.append([
-                        len(parks_spots),
-                        round(box[0] + width_reduction),
-                        round(box[1] + height_reduction),
-                        round(box[2] - width_reduction),
-                        round(box[3] - height_reduction),
-                        1.0
-                    ])
+                    parks_spots = set_default_park_spots(car_spots, parks_spots, box)
 
-                    cv2.rectangle(frame, ( round(box[0] + width_reduction), round(box[1] + height_reduction)), (round(box[2] - width_reduction), round(box[3] - height_reduction),), (255, 0, 0), 2)
+
+                    # scale_factor = 0.5  # Уменьшение на 15%
+                    # width_reduction = int((box[2] - box[0]) * (1 - scale_factor) / 2)
+                    # height_reduction = int((box[3] - box[1]) * (1 - scale_factor) / 2)
+                    #
+                    # parks_spots.append([
+                    #     len(parks_spots),
+                    #     round(box[0] + width_reduction),
+                    #     round(box[1] + height_reduction),
+                    #     round(box[2] - width_reduction),
+                    #     round(box[3] - height_reduction),
+                    #     1.0
+                    # ])
+
+                    #cv2.rectangle(frame, ( round(box[0] + width_reduction), round(box[1] + height_reduction)), (round(box[2] - width_reduction), round(box[3] - height_reduction),), (255, 0, 0), 2)
                 else:
                     # for check_spot in parks_spots:
                     #     check_weight = check_spot[5]
@@ -110,18 +153,22 @@ def process_video_with_tracking(model, input_video_path, output_video_path="outp
 
                 for spots in parks_spots:
                     id,x1,y1,x2,y2,wii= spots
-                    if wii >= 1.1:
-                        #print(wii)
+                    if wii >= 0.9 and abs(x1 + x2) > 10:
+                        print(wii)
                         cv2.rectangle(frame, (x1, y1), (x2, y2,), (0, 255, 255), 2)
                     else:
-                        #print("NO")
+                        print(wii)
                         cv2.rectangle(frame, (x1, y1), (x2, y2,), (0, 0, 255), 2)
 
                     #cv2.rectangle(frame, (x1, y1), (x2, y2,), (0, 255, 255), 2)
 
             parks_spots = update_weights(parks_spots, car_spots, full_frame)
-            for need in parks_spots:
-                print(need[5])
+
+
+            #Для вывода весов
+            # for need in parks_spots:
+            #     print(need[5])
+
             #print(parks_spots)
             #print(car_spots)
             car_spots = []
@@ -129,6 +176,11 @@ def process_video_with_tracking(model, input_video_path, output_video_path="outp
 
             frame = cv2.resize(frame, (0, 0), fx=0.75, fy=0.75)
             cv2.imshow("frame", frame)
+            if frame_count == 0:
+                cv2.waitKey(5000)
+
+            if frame_count > 20:
+                cv2.waitKey(100)
             frame_count += 1
 
             if cv2.waitKey(1) & 0xFF == ord("q"):
